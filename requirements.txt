@@ -1,0 +1,6 @@
+certifi
+colorama
+aiohttp
+loguru
+websockets-proxy
+fake-useragent
