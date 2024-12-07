@@ -24,7 +24,10 @@ git clone https://github.com/adhe222/getgrass-autoproxy.git
    python3 -m venv venv
    source venv/bin/activate
 ```
-
+open directory getgrass-autoproxy
+```bash
+cd getgrass-autoproxy
+```
 3. Install dependencies:
    
 ```bash
