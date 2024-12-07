@@ -1,0 +1,221 @@
+import asyncio
+import random
+import ssl
+import json
+import time
+import uuid
+import aiohttp
+from loguru import logger
+from websockets_proxy import Proxy, proxy_connect
+from fake_useragent import UserAgent
+from itertools import cycle
+from rich.console import Console
+from rich.text import Text
+from rich.panel import Panel
+from signal import SIGINT, SIGTERM
+
+# Constants for configuration
+PROXY_API_URL = "https://proxy-list.download/api/v1/get?type=https"  # URL untuk mendapatkan daftar proxy
+WSS_URIS = ["wss://proxy2.wynd.network:4444/", "wss://proxy2.wynd.network:4650/"]
+SERVER_HOSTNAME = "proxy2.wynd.network"
+PING_INTERVAL = 5
+PROXY_UPDATE_INTERVAL = 60  # Update proxy list every 60 seconds
+USER_ID_FILE = "user_ids.txt"  # File untuk memuat User ID
+
+active_proxies = set()  # Track active proxies to avoid duplicate attempts
+available_proxies = set()  # Store available proxies for periodic updates
+user_ids = []  # List of user IDs
+console = Console()  # Rich console for colorful output
+
+
+def show_banner():
+    """
+    Display a banner with the text 'KONTLIJO' using rich.
+    """
+    banner_text = Text("KONTLIJO", style="bold magenta", justify="center")
+    console.print(Panel(banner_text, expand=True, style="bold cyan", title="WELCOME", subtitle="by adhe222"))
+
+
+def load_user_ids():
+    """
+    Load User IDs from a text file.
+    """
+    try:
+        with open(USER_ID_FILE, "r") as file:
+            user_ids = [line.strip() for line in file.readlines() if line.strip()]
+            logger.info(f"Loaded {len(user_ids)} User IDs from {USER_ID_FILE}")
+            return user_ids
+    except FileNotFoundError:
+        logger.error(f"File {USER_ID_FILE} not found. Please create it with User IDs.")
+        return []
+    except Exception as e:
+        logger.error(f"Error loading User IDs: {e}")
+        return []
+
+
+async def fetch_proxies():
+    """
+    Fetch proxy list from the API and parse plain text format.
+    """
+    global available_proxies
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(PROXY_API_URL) as response:
+                if response.status == 200:
+                    # Decode plain text format
+                    text_data = await response.text()
+                    proxies = text_data.splitlines()  # Split text into lines
+                    logger.info(f"Fetched {len(proxies)} proxies from API")
+                    available_proxies.update(proxies)
+                else:
+                    logger.error(f"Failed to fetch proxies: {response.status}")
+    except Exception as e:
+        logger.error(f"Error fetching proxies: {e}")
+
+
+async def update_proxies_periodically():
+    """
+    Periodically fetch new proxies from the API.
+    """
+    while True:
+        await fetch_proxies()
+        await asyncio.sleep(PROXY_UPDATE_INTERVAL)
+
+
+async def animate_ping_pong(action):
+    """
+    Display an animation for the Ping and Pong actions.
+    """
+    animation = cycle(['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'])
+    for _ in range(10):  # Animation loop for a short duration
+        print(f"\r{action} {next(animation)}", end='', flush=True)
+        await asyncio.sleep(0.1)
+    print("\r", end='', flush=True)  # Clear line after animation
+
+
+async def connect_to_wss(socks5_proxy, user_id):
+    """
+    Connect to WebSocket server using a proxy and user ID.
+    """
+    global active_proxies
+
+    if socks5_proxy in active_proxies:
+        logger.warning(f"Skipping already active proxy: {socks5_proxy}")
+        return
+
+    active_proxies.add(socks5_proxy)
+
+    user_agent = UserAgent(os=['windows', 'macos', 'linux'], browsers='chrome')
+    random_user_agent = user_agent.random
+    device_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, socks5_proxy))
+    logger.info(f"Device ID: {device_id} for Proxy: {socks5_proxy} with User ID: {user_id}")
+
+    try:
+        while True:
+            await asyncio.sleep(random.uniform(0.1, 1.0))  # Random delay
+            custom_headers = {"User-Agent": random_user_agent}
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+
+            uri = random.choice(WSS_URIS)
+            proxy = Proxy.from_url(socks5_proxy)
+
+            async with proxy_connect(uri, proxy=proxy, ssl=ssl_context,
+                                     server_hostname=SERVER_HOSTNAME, extra_headers=custom_headers) as websocket:
+                async def send_ping():
+                    while True:
+                        try:
+                            send_message = json.dumps(
+                                {"id": str(uuid.uuid4()), "version": "1.0.0", "action": "PING", "data": {}}
+                            )
+                            await websocket.send(send_message)
+                            asyncio.create_task(animate_ping_pong("PING"))  # Start ping animation
+                            logger.debug(f"Sending ping: {send_message}")
+                            await asyncio.sleep(PING_INTERVAL)
+                        except Exception as ping_err:
+                            logger.error(f"Ping error: {ping_err}")
+                            break
+
+                asyncio.create_task(send_ping())
+
+                while True:
+                    response = await websocket.recv()
+                    message = json.loads(response)
+                    logger.info(f"Received message: {message}")
+
+                    if message.get("action") == "AUTH":
+                        auth_response = {
+                            "id": message["id"],
+                            "origin_action": "AUTH",
+                            "result": {
+                                "browser_id": device_id,
+                                "user_id": user_id,
+                                "user_agent": custom_headers['User-Agent'],
+                                "timestamp": int(time.time()),
+                                "device_type": "desktop",
+                                "version": "4.29.0",
+                            }
+                        }
+                        logger.debug(f"Sending AUTH response: {auth_response}")
+                        await websocket.send(json.dumps(auth_response))
+
+                    elif message.get("action") == "PONG":
+                        asyncio.create_task(animate_ping_pong("PONG"))  # Start pong animation
+                        pong_response = {"id": message["id"], "origin_action": "PONG"}
+                        logger.debug(f"Sending PONG response: {pong_response}")
+                        await websocket.send(json.dumps(pong_response))
+    except Exception as e:
+        logger.error(f"Error with proxy {socks5_proxy}: {e}")
+        active_proxies.discard(socks5_proxy)  # Remove failed proxy
+        logger.info(f"Removed failed proxy: {socks5_proxy}")
+
+
+async def main():
+    """
+    Main function to handle WebSocket connections with multi-user support.
+    """
+    global user_ids
+
+    # Display the banner
+    show_banner()
+
+    # Load User IDs from file
+    user_ids = load_user_ids()
+    if not user_ids:
+        logger.error("No User IDs loaded. Exiting...")
+        return
+
+    # Start periodic proxy updates
+    asyncio.create_task(update_proxies_periodically())
+
+    while True:
+        # Schedule tasks for new proxies and rotate user IDs
+        new_proxies = available_proxies - active_proxies
+        tasks = []
+        for i, proxy in enumerate(new_proxies):
+            user_id = user_ids[i % len(user_ids)]  # Rotate user IDs
+            tasks.append(asyncio.create_task(connect_to_wss(proxy, user_id)))
+
+        if tasks:
+            logger.info(f"Starting {len(tasks)} new connections.")
+            await asyncio.gather(*tasks, return_exceptions=True)
+        else:
+            logger.info("No new proxies to connect. Waiting...")
+        
+        await asyncio.sleep(10)  # Check for new proxies every 10 seconds
+
+
+async def shutdown(tasks):
+    """
+    Gracefully shut down all running tasks.
+    """
+    logger.info("Shutting down...")
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    asyncio.get_running_loop().stop()
+
+
+if __name__ == '__main__':
+    asyncio.run(main())
