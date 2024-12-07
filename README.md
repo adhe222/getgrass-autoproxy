@@ -17,7 +17,7 @@ This script connects to a WebSocket server using a SOCKS5 proxy, supports multip
 1. Clone the repository or download the file:
 
 ```bash
-https://github.com/adhe222/getgrass-autoproxy.git
+git clone https://github.com/adhe222/getgrass-autoproxy.git
 ```
 2. Create a virtual environment:
 ```bash
