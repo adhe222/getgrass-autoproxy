@@ -14,7 +14,7 @@ from rich.text import Text
 from rich.panel import Panel
 
 # Constants for configuration
-PROXY_API_URL = "http://204.48.18.104/successful_proxies.txt"
+PROXY_API_URL = "https://www.proxy-list.download/api/v1/get?type=https"
 WSS_URIS = ["wss://proxy2.wynd.network:4444/", "wss://proxy2.wynd.network:4650/"]
 SERVER_HOSTNAME = "proxy2.wynd.network"
 PING_INTERVAL = 5
