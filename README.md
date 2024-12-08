@@ -9,7 +9,10 @@ This script connects to a WebSocket server using a SOCKS5 proxy, supports multip
 ## Features
 - Supports multiple User IDs loaded from `user_ids.txt`.
 - Automatically fetches proxy list from an API.
-
+- Support load proxy dari proxies.txt, dengan format:
+  ```bash
+  http://ip:port
+  ```
 ## Prerequisites
 - Python 3.7 or higher.
 
