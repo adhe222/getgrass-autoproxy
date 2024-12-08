@@ -27,6 +27,7 @@ SERVER_HOSTNAME = "proxy2.wynd.network"
 PING_INTERVAL = 5
 PROXY_UPDATE_INTERVAL = 60
 USER_ID_FILE = "user_ids.txt"
+PROXY_FILE = "proxies.txt"
 
 active_proxies = set()
 available_proxies = set()
@@ -50,15 +51,38 @@ def load_user_ids():
         logger.error(f"Error loading User IDs: {e}")
         return []
 
-def select_api_url():
-    print("Select API URL:")
-    for key, (server_name, _) in PROXY_API_URLS.items():
-        print(f"{key}. {server_name}")
+def load_proxies_from_file():
+    try:
+        with open(PROXY_FILE, "r") as file:
+            proxies = {line.strip() for line in file.readlines() if line.strip()}
+            logger.info(f"Loaded {len(proxies)} proxies from {PROXY_FILE}")
+            return proxies
+    except FileNotFoundError:
+        logger.error(f"File {PROXY_FILE} not found.")
+        return set()
+    except Exception as e:
+        logger.error(f"Error loading proxies from file: {e}")
+        return set()
+
+def select_proxy_source():
+    print("Select Proxy Source:")
+    print("1. SERVER 1")
+    print("2. SERVER 2")
+    print("3. SERVER 3")
+    print("4. SERVER 4")
+    print("5. SERVER 5")
+    print("6. SERVER 6")
+    print("7. Enter your own API URL")
+    print("8. Load proxies from proxies.txt")
     while True:
         try:
-            choice = int(input("Enter your choice (1-6): ").strip())
+            choice = int(input("Enter your choice (1-8): ").strip())
             if choice in PROXY_API_URLS:
-                return PROXY_API_URLS[choice][1]
+                return "api", PROXY_API_URLS[choice][1]
+            elif choice == 7:
+                return "api", input("Enter your custom API URL: ").strip()
+            elif choice == 8:
+                return "file", None
             else:
                 print("Invalid choice. Please select a valid option.")
         except ValueError:
@@ -84,9 +108,13 @@ async def fetch_proxies(api_url):
     except Exception as e:
         logger.error(f"Error fetching proxies from {api_url}: {e}")
 
-async def update_proxies_periodically(api_url):
+async def update_proxies_periodically(api_url=None, file_proxies=None):
     while True:
-        await fetch_proxies(api_url)
+        if api_url:
+            await fetch_proxies(api_url)
+        elif file_proxies:
+            available_proxies.update(file_proxies)
+            logger.info(f"Loaded proxies from proxies.txt")
         await asyncio.sleep(PROXY_UPDATE_INTERVAL)
 
 async def animate_ping_pong(action):
@@ -168,8 +196,11 @@ async def main():
     if not user_ids:
         logger.error("No User IDs loaded. Exiting...")
         return
-    api_url = select_api_url()
-    asyncio.create_task(update_proxies_periodically(api_url))
+    proxy_source, api_url = select_proxy_source()
+    file_proxies = None
+    if proxy_source == "file":
+        file_proxies = load_proxies_from_file()
+    asyncio.create_task(update_proxies_periodically(api_url=api_url, file_proxies=file_proxies))
     while True:
         new_proxies = available_proxies - active_proxies
         tasks = []
