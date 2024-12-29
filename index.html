@@ -149,6 +149,12 @@
                 </thead>
                 <tbody id="proxyBody"></tbody>
             </table>
+
+            <!-- Pagination Controls -->
+            <div class="d-flex justify-content-between mt-3">
+                <button id="prev-page" class="btn btn-primary" disabled>Previous</button>
+                <button id="next-page" class="btn btn-primary">Next</button>
+            </div>
         </div>
     </section>
 
@@ -181,11 +187,11 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-    let currentPage = 1; // Halaman saat ini
-    const proxiesPerPage = 50; // Jumlah proxy per halaman
-    let proxies = []; // Menyimpan data proxy
+    let currentPage = 1; // Current page
+    const proxiesPerPage = 50; // Proxies per page
+    let proxies = []; // Store proxy data
 
-    // Memuat data dari file proxies.json
+    // Fetch proxy data
     fetch('proxies.json')
         .then(response => response.json())
         .then(data => {
@@ -194,14 +200,14 @@
         })
         .catch(error => console.error('Error fetching proxies:', error));
 
-    // Fungsi untuk menampilkan tabel proxy
+    // Render proxy table
     function renderTable() {
         const startIndex = (currentPage - 1) * proxiesPerPage;
         const endIndex = startIndex + proxiesPerPage;
         const currentProxies = proxies.slice(startIndex, endIndex);
 
-        const tbody = document.getElementById('proxy-list');
-        tbody.innerHTML = ''; // Menghapus data sebelumnya
+        const tbody = document.getElementById('proxyBody');
+        tbody.innerHTML = ''; // Clear previous data
 
         currentProxies.forEach(proxy => {
             const row = `<tr>
@@ -217,7 +223,7 @@
         updatePaginationButtons();
     }
 
-    // Fungsi untuk memperbarui tombol navigasi
+    // Update pagination buttons
     function updatePaginationButtons() {
         const prevButton = document.getElementById('prev-page');
         const nextButton = document.getElementById('next-page');
@@ -226,7 +232,7 @@
         nextButton.disabled = currentPage * proxiesPerPage >= proxies.length;
     }
 
-    // Event listener untuk tombol navigasi
+    // Event listeners for pagination buttons
     document.getElementById('prev-page').addEventListener('click', () => {
         if (currentPage > 1) {
             currentPage--;
@@ -240,7 +246,8 @@
             renderTable();
         }
     });
-</script>
+    </script>
 
 </body>
+
 </html>
